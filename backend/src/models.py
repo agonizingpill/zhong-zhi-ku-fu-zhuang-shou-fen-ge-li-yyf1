@@ -72,6 +72,7 @@ class Pollination(Base):
     bagged:Mapped[bool]=mapped_column(default=False)
     flowers:Mapped[int]=mapped_column(Integer)
     state:Mapped[str]=mapped_column(String(20),default='prepared')
+    active:Mapped[bool]=mapped_column(default=True,index=True)
 class Harvest(Base):
     __tablename__='harvests'
     id:Mapped[int]=mapped_column(primary_key=True)
@@ -92,6 +93,33 @@ class Distribution(Base):
     purpose:Mapped[str]=mapped_column(String(300))
     state:Mapped[str]=mapped_column(String(20),default='requested')
     reserve_snapshot:Mapped[dict|None]=mapped_column(JSON,nullable=True)
+class Emergence(Base):
+    __tablename__='emergences'
+    __table_args__=(CheckConstraint('emerged >= 0 AND sown >= emerged'),)
+    id:Mapped[int]=mapped_column(primary_key=True)
+    regeneration_id:Mapped[int]=mapped_column(ForeignKey('regenerations.id'),index=True)
+    code:Mapped[str]=mapped_column(String(60),unique=True)
+    sown:Mapped[int]=mapped_column(Integer)
+    emerged:Mapped[int]=mapped_column(Integer)
+    sowing_date:Mapped[str]=mapped_column(String(10))
+    state:Mapped[str]=mapped_column(String(20),default='recorded')
+class Resow(Base):
+    __tablename__='resows'
+    __table_args__=(CheckConstraint('target_plants > 0 AND (needed_seeds IS NULL OR needed_seeds > 0) AND (approved_seeds IS NULL OR approved_seeds > 0)'),)
+    id:Mapped[int]=mapped_column(primary_key=True)
+    code:Mapped[str]=mapped_column(String(60),unique=True)
+    regeneration_id:Mapped[int]=mapped_column(ForeignKey('regenerations.id'))
+    emergence_id:Mapped[int]=mapped_column(ForeignKey('emergences.id'))
+    plot_id:Mapped[int]=mapped_column(ForeignKey('plots.id'))
+    start:Mapped[str]=mapped_column(String(10))
+    end:Mapped[str]=mapped_column(String(10))
+    target_plants:Mapped[int]=mapped_column(Integer)
+    needed_seeds:Mapped[int|None]=mapped_column(Integer,nullable=True)
+    estimate_snapshot:Mapped[dict|None]=mapped_column(JSON,nullable=True)
+    state:Mapped[str]=mapped_column(String(20),default='pending_review')
+    approved_seeds:Mapped[int|None]=mapped_column(Integer,nullable=True)
+    reserve_snapshot:Mapped[dict|None]=mapped_column(JSON,nullable=True)
+    reject_reason:Mapped[str|None]=mapped_column(String(300),nullable=True)
 class Audit(Base):
     __tablename__='audits'
     id:Mapped[int]=mapped_column(primary_key=True)

@@ -59,3 +59,30 @@ class DistributionInput(BaseModel):
     recipient:str=Field(min_length=2,max_length=100)
     seeds:int=Field(ge=1,le=10000)
     purpose:str=Field(min_length=5,max_length=300)
+class EmergenceInput(BaseModel):
+    regeneration_id:int
+    code:str=Field(min_length=3,max_length=60)
+    sowing_date:date
+    sown:int=Field(ge=1,le=10000)
+    emerged:int=Field(ge=0)
+    @model_validator(mode='after')
+    def valid(self):
+        if self.emerged>self.sown:raise ValueError('出苗数不能超过播量')
+        return self
+class ResowEstimate(BaseModel):
+    regeneration_id:int
+    target_plants:int=Field(ge=1,le=10000)
+class ResowInput(BaseModel):
+    regeneration_id:int
+    code:str=Field(min_length=3,max_length=60)
+    plot_id:int
+    start:date
+    end:date
+    target_plants:int=Field(ge=1,le=10000)
+    @model_validator(mode='after')
+    def valid(self):
+        if self.end<self.start:raise ValueError('重播花期结束不得早于开始')
+        if (self.end-self.start).days>60:raise ValueError('花期不超过60天')
+        return self
+class ResowConfirm(BaseModel):
+    approved_seeds:int|None=Field(default=None,ge=1,le=10000)

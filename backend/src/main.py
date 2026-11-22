@@ -10,7 +10,7 @@ from .models import *
 from .schemas import *
 from .auth import current,writer,supervisor,verify,token
 from .common import pack,lock,add,audit
-from . import renewal_service as renewal,isolation_service as isolation,harvest_service as harvest,sharing_service as sharing
+from . import renewal_service as renewal,isolation_service as isolation,harvest_service as harvest,sharing_service as sharing,resow_service as resow
 from .middleware import Trace,Burst
 queue=redis.Redis.from_url(os.environ['REDIS_URL'],decode_responses=True)
 @asynccontextmanager
@@ -31,7 +31,7 @@ def login(d:Login,s=Depends(session)):
 def me(u=Depends(current)):return {'email':u.email,'role':u.role}
 @app.get('/archive')
 def archive(s=Depends(session),u=Depends(current)):
-    return {cls.__tablename__:[pack(x)for x in s.scalars(select(cls).order_by(cls.id))]for cls in (Accession,Lot,GerminationTest,Regeneration,Plot,Flowering,Pollination,Harvest,Distribution)}
+    return {cls.__tablename__:[pack(x)for x in s.scalars(select(cls).order_by(cls.id))]for cls in (Accession,Lot,GerminationTest,Regeneration,Plot,Flowering,Pollination,Harvest,Distribution,Emergence,Resow)}
 @app.get('/audits')
 def audits(s=Depends(session),u=Depends(current)):return [pack(x)for x in s.scalars(select(Audit).order_by(Audit.id.desc()).limit(50))]
 @app.post('/accessions')
@@ -85,6 +85,21 @@ def edit_pollen(id:int,d:PollenInput,s=Depends(session),u=Depends(writer)):
 @app.post('/pollinations/{id}/pollinate')
 def pollinate(id:int,s=Depends(session),u=Depends(supervisor)):
     x=isolation.pollinate(s,id,u);s.commit();return x
+@app.post('/emergences')
+def emergence(d:EmergenceInput,s=Depends(session),u=Depends(writer)):
+    x=resow.record_emergence(s,d,u);s.commit();return x
+@app.post('/resows/estimate')
+def resow_estimate(d:ResowEstimate,s=Depends(session),u=Depends(current)):
+    return resow.estimate(s,d.regeneration_id,d.target_plants)
+@app.post('/resows')
+def resow_apply(d:ResowInput,s=Depends(session),u=Depends(writer)):
+    x=resow.apply_resow(s,d,u);s.commit();return x
+@app.post('/resows/{id}/confirm')
+def resow_confirm(id:int,d:ResowConfirm,s=Depends(session),u=Depends(supervisor)):
+    x=resow.confirm_resow(s,id,u,d.approved_seeds);s.commit();return x
+@app.post('/resows/{id}/reject')
+def resow_reject(id:int,s=Depends(session),u=Depends(supervisor)):
+    x=resow.reject_resow(s,id,u);s.commit();return x
 @app.post('/harvests')
 def harvested(d:HarvestInput,s=Depends(session),u=Depends(writer)):
     x=harvest.save(s,d,u);s.commit();return x

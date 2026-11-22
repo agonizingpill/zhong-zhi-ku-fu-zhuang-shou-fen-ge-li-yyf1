@@ -41,17 +41,25 @@ def prepare(s,d,u,id=None):
     mother=s.get(Lot,d.mother_lot_id);father=s.get(Lot,d.father_lot_id)
     if not mother or not father:raise HTTPException(404,'亲本种批不存在')
     if mother.id!=r.lot_id or mother.accession_id!=father.accession_id or mother.generation!=father.generation:raise HTTPException(409,'母本须为领种批，父本须同种质同代次；复壮不接受异源杂交')
-    if d.flowers>r.issued:raise HTTPException(409,'授粉花数不能超过领种株数')
+    if d.flowers>r.issued:raise HTTPException(409,'授粉花数不能超过下田株数（含重播补领'+str(r.issued)+'株）')
     x=lock(s,Pollination,id) if id else None
-    if x and (x.regeneration_id!=r.id or x.state!='prepared'):raise HTTPException(409,'授粉后不可覆盖亲本或袋签')
-    if x:
-        for k,v in d.model_dump().items():setattr(x,k,v)
-    else:x=Pollination(**d.model_dump());s.add(x)
+    if x and (x.regeneration_id!=r.id or not x.active or x.state!='prepared'):raise HTTPException(409,'授粉后不可覆盖亲本或袋签；重播后请用新袋签另登记')
+    if not x:
+        # 每复壮单一条授粉行：重播先成会停用旧行，新配对复用该行但必须换新袋签。
+        old=s.scalar(select(Pollination).where(Pollination.regeneration_id==r.id))
+        if old:
+            if old.active:raise HTTPException(409,'本单已有进行中的授粉袋签，请修订原记录')
+            if d.bag_code==old.bag_code:raise HTTPException(409,'旧袋签已停用，重播须启用全新袋签编号')
+            old.active=True;old.state='prepared';old.bagged=False;x=old
+        else:
+            x=Pollination(**d.model_dump());s.add(x);s.flush();audit(s,u,'登记亲本与套袋 '+d.bag_code);return pack(x)
+    for k,v in d.model_dump().items():setattr(x,k,v)
     s.flush();audit(s,u,'登记亲本与套袋 '+d.bag_code);return pack(x)
 
 def pollinate(s,id,u):
     pre=s.get(Pollination,id)
     if not pre:raise HTTPException(404,'授粉记录不存在')
+    if not pre.active:raise HTTPException(409,'该袋签已随换地重播停用，请在新地块重新套袋')
     # 与prepare保持同一锁序：复壮根记录 → 授粉记录。
     r=lock(s,Regeneration,pre.regeneration_id);x=lock(s,Pollination,id)
     if x.state!='prepared' or r.state!='issued':raise HTTPException(409,'授粉不可重复')
